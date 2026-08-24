@@ -1,128 +1,100 @@
 # Recovery-Khata-MF
 
-Excel **VBA automation** for **Recovery Manager** and **Khata** (ledger) master workbooks: year/month/employee folder trees, templated recovery day-sheets, khata opening-balance chains, dropdowns, sheet protection, bulk refresh, and backup utilities.
+Excel **VBA** operations workbook for **Recovery Manager** (daily recovery registers) and **Khata** (ledger) books: year/month/employee folder trees, templated day-sheets, opening-balance chains, dropdowns, sheet protection, bulk refresh, and backups.
 
-**Primary workbook:** `Recovery & Khata Master File/Recovery Manager.xlsm`  
-**Extracted VBA (for review/diff):** `_vba_extract/modules/`
-
----
-
-## Overview
-
-Recovery-Khata-MF is an operations workbook used to manage field **recovery registers** and **khata** books per employee and calendar period. From the **Home** sheet, users set a root folder, year, month, and employee; macros then:
-
-1. Create the on-disk folder hierarchy.
-2. Generate recovery workbooks with working-day sheets from **Recovery Template**.
-3. Generate / refresh khata workbooks from **Khata Template**, including opening-balance cascade.
-4. Apply named-range dropdowns, protect sheets while allowing table edits, and optionally backup or refresh all employee files.
-
-Workbook sheets (from `workbook.xml`): **Home**, **Recovery Template**, **Khata Template**, **Settings**.
-
-Named ranges drive UI state (`txtRootFolder`, `selYear`, `selMonth`, `selEmployee`, `AreaList`, `empList`, `MonthList`, `YearList`, ...).
+**Primary file:** `Recovery & Khata Master File/Recovery Manager.xlsm`  
+**Reviewable VBA:** `_vba_extract/modules/`  
+[rohaan2802](https://github.com/rohaan2802)
 
 ---
 
-## Features
+## Table of contents
 
-| Module | Role |
-|--------|------|
-| `modFolders` | `CreateNewYear`, `CreateNewMonth`, `CreateEmployeeFolder` |
-| `modWorkbook` | `CreateRecoveryWorkbook` / silent create, `CreateKhataWorkbook`, `RefreshKhataOpeningBalances`, `RebuildKhataOpeningChain`, `UpgradeExistingRecoveryRegisters`, working-day sheet generation, install child VBA |
-| `modRecoveryChild` | Day-sheet change handlers, PTO carry-forward, remaining formulas, working-day helpers |
-| `modDropdowns` | Hidden lists sheet, named ranges, per-sheet dropdown application |
-| `modProtection` | Auto-fit, editable locks, `SecureWorkbook`, trusted location helpers |
+1. [Workbook sheets and named ranges](#workbook-sheets-and-named-ranges)
+2. [Modules](#modules)
+3. [Typical operating sequence](#typical-operating-sequence)
+4. [Python helpers](#python-helpers)
+5. [Security](#security)
+6. [How to open](#how-to-open)
+
+---
+
+## Workbook sheets and named ranges
+
+From `workbook.xml`: **Home**, **Recovery Template**, **Khata Template**, **Settings**.
+
+Named ranges drive the Home UI, including:
+
+`txtRootFolder`, `selYear`, `selMonth`, `selEmployee`, `AreaList`, `empList`, `MonthList`, `YearList`, plus refresh status (`RefreshStatus`).
+
+Staff never edit VBA to change period — they set these cells/dropdowns and press the bound macros.
+
+---
+
+## Modules
+
+| Module | Responsibilities |
+|--------|------------------|
+| `modFolders` | `CreateNewYear`, `CreateNewMonth`, `CreateEmployeeFolder` — on-disk tree under the root |
+| `modWorkbook` | `CreateRecoveryWorkbook` (and silent create), `CreateKhataWorkbook`, `RefreshKhataOpeningBalances`, `RebuildKhataOpeningChain`, `UpgradeExistingRecoveryRegisters`, working-day sheet generation, install **child** VBA into generated books |
+| `modRecoveryChild` | Day-sheet `Change` handlers, **PTO carry-forward**, remaining formulas, working-day helpers |
+| `modDropdowns` | Hidden lists sheet, named ranges, per-sheet dropdowns |
+| `modProtection` | Auto-fit, editable regions, `SecureWorkbook`, **trusted location** helpers |
 | `modRefresh` | `RefreshAllEmployeeWorkbooks` |
-| `modBackup` | `WorkDoneCreateBackup` - scan folders, copy/fit workbooks into backup tree |
+| `modBackup` | `WorkDoneCreateBackup` — walk tree, copy, auto-fit for archive |
 | `ThisWorkbook` | `Workbook_Open`, sheet-change hooks, khata border / green-triangle cleanup |
-| `modMain` / `modSettings` | Entry/shared notes; settings helpers |
+| `modMain` / `modSettings` | Thin entry / settings notes |
+| `Sheet1`–`Sheet4` `.cls` | Sheet-local event shells |
 
-Python helpers in the local tree (`fix_workbook.py`, `update_mod_*.py`, `diagnose_*.py`, ...) support VBA extract/repair workflows around the `.xlsm`.
-
----
-
-## Repository structure
-
-```text
-Recovery-Khata-MF/
-└── Recovery & Khata Master File/
-    ├── Recovery Manager.xlsm
-    ├── _vba_extract/
-    │   ├── modules/
-    │   │   ├── modFolders.bas
-    │   │   ├── modWorkbook.bas
-    │   │   ├── modRecoveryChild.bas
-    │   │   ├── modDropdowns.bas
-    │   │   ├── modProtection.bas
-    │   │   ├── modRefresh.bas
-    │   │   ├── modBackup.bas
-    │   │   ├── modMain.bas | modSettings.bas
-    │   │   ├── ThisWorkbook.cls
-    │   │   └── Sheet1-4.cls
-    │   └── unzipped/xl/...          # OOXML dump (workbook.xml, sheets, tables)
-    └── *.py                       # maintenance / diagnose scripts (local)
-```
+Generated recovery books get **child** code so daily tables validate even when the master is closed.
 
 ---
 
-## Build / run
+## Typical operating sequence
 
-### Runtime
+**Period setup**
 
-1. Windows + **Microsoft Excel** with **macros enabled**.
-2. Open `Recovery Manager.xlsm`.
-3. If prompted, trust the file location (`modProtection.EnsureTrustedLocation` supports this flow).
-4. On **Settings** / **Home**, set:
-   - Root folder path (`txtRootFolder`)
-   - Year / month / employee (and areas as needed from Settings tables)
-5. Run UI-bound macros (buttons or Developer → Macros), commonly:
-   - Create year → month → employee folders
-   - Create Recovery workbook / Create Khata workbook
-   - Refresh khata openings / refresh all employee workbooks
-   - Work-done backup
+1. Set root, year, month, employee (and areas from Settings).  
+2. `CreateNewYear` → `CreateNewMonth` → `CreateEmployeeFolder`.  
+3. `CreateRecoveryWorkbook` — working-day sheets from **Recovery Template**, dropdowns, protection, child VBA.  
+4. Field staff fill tables; `modRecoveryChild` can carry PTO rows forward.
 
-### Viewing VBA without Excel
+**Khata**
 
-Open `_vba_extract/modules/*.bas` in any editor. Re-import into the `.xlsm` via the VBA IDE if you change sources.
-
----
-
-## Usage
-
-**Typical recovery period setup**
-
-1. Choose root directory for the company/season.
-2. `CreateNewYear` → `CreateNewMonth` → `CreateEmployeeFolder`.
-3. `CreateRecoveryWorkbook` - generates working-day sheets, installs recovery child logic, applies protection/dropdowns.
-4. Staff enter daily recovery table data; `modRecoveryChild` validates changes and can carry PTO rows forward.
-
-**Khata flow**
-
-1. `CreateKhataWorkbook` from the Khata template.
-2. `RefreshKhataOpeningBalances` / `RebuildKhataOpeningChain` to keep month-to-month balances consistent.
-3. Use Home refresh status (`RefreshStatus`) after bulk `RefreshAllEmployeeWorkbooks`.
+1. `CreateKhataWorkbook` from **Khata Template**.  
+2. `RefreshKhataOpeningBalances` / `RebuildKhataOpeningChain` so month *n* opening matches month *n−1* closing.  
+3. Bulk: `RefreshAllEmployeeWorkbooks` and watch Home `RefreshStatus`.
 
 **Backup**
 
-- `WorkDoneCreateBackup` walks the tree, copies workbooks, and auto-fits tables for archival readability.
+- `WorkDoneCreateBackup` copies the tree into a backup layout and auto-fits tables for print/PDF.
 
 ---
 
-## Extending
+## Python helpers
 
-- Keep business rules in `modRecoveryChild` / `modWorkbook`; leave `modMain` as a thin pointer module.
-- After VBA edits, re-export modules to `_vba_extract/modules` so Git diffs stay reviewable (binary `.xlsm` alone is opaque).
-- Parameterize protection passwords and template sheet names in `Settings` tables.
-- Add automated smoke tests that open the workbook via `win32com` and call `CreateNewMonth` against a temp folder (see local `test_*.py` patterns).
+Local scripts (`fix_workbook.py`, `update_mod_*.py`, `diagnose_*.py`, `test_*.py`) extract/repair VBA around the binary `.xlsm`. After VBA edits, **re-export** `.bas` / `.cls` into `_vba_extract/modules` so Git diffs stay readable.
 
----
-
-## Security notes
-
-- Workbook protection and editable-region locks are enforced in VBA - treat passwords and trusted locations carefully.
-- Do not commit live employee financial data; keep sample/demo folders separate from production roots.
+OOXML dump: `_vba_extract/unzipped/xl/` (`workbook.xml`, sheets, tables).
 
 ---
 
-## License
+## Security
 
-Internal / operational automation tool - restrict distribution of production workbooks containing personal or financial data.
+- Sheet protection passwords live in VBA — treat as sensitive.  
+- `EnsureTrustedLocation` exists so Excel will run macros; only trust paths you control.  
+- **Do not commit live employee financial data.** Demo roots ≠ production roots.
+
+---
+
+## How to open
+
+Windows + Excel, **macros enabled**. Open `Recovery Manager.xlsm`, trust the location if prompted, then use Home/Settings buttons (or Developer → Macros) for the names above.
+
+Without Excel: read `_vba_extract/modules/*.bas`. Re-import via the VBA IDE after edits.
+
+---
+
+## Author
+
+Internal operations automation · [rohaan2802](https://github.com/rohaan2802)
